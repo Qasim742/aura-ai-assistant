@@ -1,0 +1,32 @@
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python environments and cache
+.venv/
+.venv313/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+build/
+
+# Runtime databases and SQLite files
+*.sqlite
+*.sqlite3
+*.db
+*-shm
+*-wal
+*-x-writes-3-value.bin
+
+# Generated audio
+*.wav
+
+# Windows metadata
+desktop.ini

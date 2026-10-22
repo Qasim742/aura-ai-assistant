@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+httpx2
+pytest
+python-dotenv
+groq
+langchain-core
+langchain-groq
+langgraph
+langgraph-checkpoint-sqlite
+PyAutoGUI
+SpeechRecognition
+playsound3
