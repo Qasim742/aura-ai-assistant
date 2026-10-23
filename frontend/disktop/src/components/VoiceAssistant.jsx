@@ -1,5 +1,6 @@
 import { ArrowLeft, Mic, MicOff, Plus, Square } from 'lucide-react';
 import { AURAOrb } from './AURAOrb';
+import { RateLimitBanner } from './RateLimitBanner';
 
 const stateCopy = {
   Idle: 'Ready when you are',
@@ -20,6 +21,7 @@ export function VoiceAssistant({
   isVoiceActive,
   isVoiceRequestPending,
   voiceError,
+  rateLimit,
   backendConnected,
 }) {
   const messages = conversation?.messages ?? [];
@@ -64,7 +66,7 @@ export function VoiceAssistant({
               ? 'Starting microphone…'
               : backendConnected ? 'Local voice pipeline' : 'Backend unavailable'}
           </p>
-          {voiceError && (
+          {voiceError && !rateLimit && (
             <p role="alert" className="mt-1 max-w-lg text-xs text-rose-300">{voiceError}</p>
           )}
 
@@ -93,29 +95,32 @@ export function VoiceAssistant({
           </div>
         </div>
 
-        <div className="mt-2 flex shrink-0 items-center justify-center gap-3">
-          <button
-            onClick={onToggleListening}
-            disabled={isVoiceRequestPending || voiceState === 'Thinking' || voiceState === 'Speaking'}
-            aria-label={isVoiceActive ? 'Stop listening' : 'Start listening'}
-            className={`flex h-14 w-14 items-center justify-center rounded-full border shadow-xl transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16 ${
-              isVoiceActive
-                ? 'border-rose-300/40 bg-rose-400/15 text-rose-200 shadow-rose-500/10'
-                : 'border-cyan-200/30 bg-cyan-300/15 text-cyan-100 shadow-cyan-500/10 hover:bg-cyan-300/25'
-            }`}
-            title={isVoiceActive ? 'Stop listening' : 'Start listening'}
-          >
-            {isVoiceActive ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-          </button>
-          {voiceState === 'Speaking' && (
+        <div className="w-full shrink-0">
+          <RateLimitBanner rateLimit={rateLimit} />
+          <div className="flex items-center justify-center gap-3">
             <button
-              onClick={onStopSpeaking}
-              className="flex h-11 items-center gap-2 rounded-xl border border-rose-300/20 bg-rose-400/[0.07] px-4 text-sm text-rose-200 transition hover:bg-rose-400/[0.12]"
+              onClick={onToggleListening}
+              disabled={isVoiceRequestPending || voiceState === 'Thinking' || voiceState === 'Speaking'}
+              aria-label={isVoiceActive ? 'Stop listening' : 'Start listening'}
+              className={`flex h-14 w-14 items-center justify-center rounded-full border shadow-xl transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16 ${
+                isVoiceActive
+                  ? 'border-rose-300/40 bg-rose-400/15 text-rose-200 shadow-rose-500/10'
+                  : 'border-cyan-200/30 bg-cyan-300/15 text-cyan-100 shadow-cyan-500/10 hover:bg-cyan-300/25'
+              }`}
+              title={isVoiceActive ? 'Stop listening' : 'Start listening'}
             >
-              <Square className="h-3.5 w-3.5 fill-current" />
-              Stop speaking
+              {isVoiceActive ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
             </button>
-          )}
+            {voiceState === 'Speaking' && (
+              <button
+                onClick={onStopSpeaking}
+                className="flex h-11 items-center gap-2 rounded-xl border border-rose-300/20 bg-rose-400/[0.07] px-4 text-sm text-rose-200 transition hover:bg-rose-400/[0.12]"
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+                Stop speaking
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </section>

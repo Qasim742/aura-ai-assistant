@@ -30,3 +30,5 @@ build/
 
 # Windows metadata
 desktop.ini
+local_tts/*.onnx
+local_tts/*.bin

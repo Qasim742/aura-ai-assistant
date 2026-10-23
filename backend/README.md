@@ -42,3 +42,8 @@ dependencies. The API reports voice startup errors instead of pretending that
 the microphone is listening. A lost status heartbeat also stops the listener
 after ten seconds; the frontend sends a best-effort stop request during page
 exit or refresh.
+
+Groq rate limits return a structured `RATE_LIMIT_EXCEEDED` error for chat
+requests. Voice status includes the same rate-limit information for Whisper
+transcription or LLM failures, including a retry duration only when the
+provider supplies reliable timing metadata.

@@ -1,5 +1,5 @@
 """FastAPI application for the AURA assistant."""
-
+import traceback
 import logging
 import threading
 import time
@@ -14,8 +14,10 @@ from pydantic import BaseModel, Field
 
 if __package__:
     from .config import APP_NAME, CORS_ORIGINS
+    from .rate_limits import rate_limit_payload
 else:
     from config import APP_NAME, CORS_ORIGINS
+    from rate_limits import rate_limit_payload
 
 
 logger = logging.getLogger(__name__)
@@ -59,12 +61,20 @@ class VoiceStopRequest(BaseModel):
     conversation_id: str = Field(min_length=1, max_length=128)
 
 
+class RateLimitNotification(BaseModel):
+    code: Literal["RATE_LIMIT_EXCEEDED"]
+    service: Literal["llm", "stt"]
+    message: str
+    retry_after_seconds: int | None = None
+
+
 class VoiceStatus(BaseModel):
     conversation_id: str | None
     state: Literal["Idle", "Listening", "Thinking", "Speaking", "Error"]
     active: bool
     messages: list[dict[str, str]]
     error: str | None = None
+    rate_limit: RateLimitNotification | None = None
 
 
 def thread_id_for_conversation(conversation_id: str) -> str:
@@ -89,7 +99,19 @@ def _get_agent_history(conversation_id: str) -> list[dict[str, str]]:
 
 
 def _agent_unavailable(error: Exception) -> HTTPException:
-    logger.exception("AURA agent request failed", exc_info=error)
+    rate_limit = rate_limit_payload(error, "llm")
+    if rate_limit:
+        logger.warning(
+            "AURA LLM request was rate limited (%s, status=%s)",
+            type(error).__name__,
+            getattr(error, "status_code", None),
+        )
+        return HTTPException(
+            status_code=429,
+            detail={"error": rate_limit},
+        )
+    traceback.print_exc()
+    logger.warning("AURA agent request failed (%s)", type(error).__name__)
     if isinstance(error, (ImportError, ValueError)):
         return HTTPException(
             status_code=503,
@@ -110,6 +132,7 @@ class VoiceSessionManager:
         self._state: Literal["Idle", "Listening", "Thinking", "Speaking", "Error"] = "Idle"
         self._active = False
         self._error: str | None = None
+        self._rate_limit: RateLimitNotification | None = None
         self._messages: list[dict[str, str]] = []
         self._stop_event: threading.Event | None = None
         self._worker: threading.Thread | None = None
@@ -132,6 +155,7 @@ class VoiceSessionManager:
                 active=self._active,
                 messages=list(self._messages),
                 error=self._error,
+                rate_limit=self._rate_limit,
             )
 
     def start(self, conversation_id: str) -> VoiceStatus:
@@ -148,6 +172,7 @@ class VoiceSessionManager:
             self._state = "Idle"
             self._active = True
             self._error = None
+            self._rate_limit = None
             self._messages = []
             self._last_status_at = time.monotonic()
             self._stop_event = threading.Event()
@@ -199,10 +224,12 @@ class VoiceSessionManager:
             )
 
     def _run(self, conversation_id: str, stop_event: threading.Event) -> None:
+        service = "stt"
         try:
             from agent.agent import listen, process_message, speak
 
             while not stop_event.is_set():
+                service = "stt"
                 recognized_text = listen(
                     stop_event=stop_event,
                     on_listening=lambda: self._set_state("Listening"),
@@ -216,6 +243,7 @@ class VoiceSessionManager:
                     continue
 
                 self._append_message("user", recognized_text)
+                service = "llm"
                 self._set_state("Thinking")
                 answer = process_message(
                     recognized_text,
@@ -227,12 +255,26 @@ class VoiceSessionManager:
                     if stop_event.is_set():
                         break
                     self._set_state("Speaking")
+                    service = "tts"
                     speak(answer, strict=True)
         except Exception as error:
-            logger.exception("AURA voice session failed")
+            rate_limit = (
+                rate_limit_payload(error, service)
+                if service in {"stt", "llm"}
+                else None
+            )
+            logger.warning(
+                "AURA voice session failed (%s, service=%s, status=%s)",
+                type(error).__name__,
+                service,
+                getattr(error, "status_code", None),
+            )
             with self._lock:
                 self._state = "Error"
-                if (
+                if rate_limit:
+                    self._rate_limit = RateLimitNotification(**rate_limit)
+                    self._error = None
+                elif (
                     isinstance(error, (ImportError, ValueError))
                     or (
                         isinstance(error, AttributeError)
@@ -244,6 +286,7 @@ class VoiceSessionManager:
                         "dependencies and check the backend configuration."
                     )
                 else:
+                    self._rate_limit = None
                     self._error = "The voice session encountered an error."
         finally:
             with self._lock:

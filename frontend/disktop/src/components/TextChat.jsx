@@ -1,6 +1,7 @@
 import { ArrowLeft, MessageSquareText } from 'lucide-react';
 import { ChatInput } from './ChatInput';
 import { ChatMessage } from './ChatMessage';
+import { RateLimitBanner } from './RateLimitBanner';
 
 export function TextChat({
   conversation,
@@ -9,6 +10,7 @@ export function TextChat({
   onExitHistory,
   isSending,
   chatError,
+  rateLimit,
   backendConnected,
 }) {
   return (
@@ -73,6 +75,7 @@ export function TextChat({
 
       <div className="px-6 pb-6 pt-3 max-sm:px-4 max-sm:pb-4">
         <div className="mx-auto w-full max-w-4xl">
+          <RateLimitBanner rateLimit={rateLimit} />
           <ChatInput onSendMessage={onSendMessage} disabled={isSending} />
           <p className="mt-2 text-center text-[11px] text-slate-600">
             {backendConnected ? 'Connected to the local AURA agent' : 'Local AURA backend unavailable'}

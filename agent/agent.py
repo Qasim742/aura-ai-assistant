@@ -1,5 +1,6 @@
 
 import os
+import logging
 import sqlite3
 import tempfile
 import threading
@@ -16,6 +17,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from agent.tools import tools
 
+
+logger = logging.getLogger(__name__)
 
 # =========================================================
 # CONFIGURATION
@@ -34,12 +37,44 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 MEMORY_PATH = PROJECT_ROOT / "aura_memory.sqlite"
 THREAD_ID = "aura-main"
 
+
 SYSTEM_PROMPT = """
 You are AURA, a helpful Windows voice assistant.
-Keep answers clear, concise, and natural for speech.
-Use available tools when needed.
-Never claim an action succeeded unless the tool confirms it.
+
+GENERAL RULES
+- Keep responses clear, concise, and natural for speech.
+- Use the available LangChain tools to perform actions.
+- Never claim an action succeeded unless the tool confirms it.
+- Do not confuse the user's message to AURA with a message to another application.
+
+WHATSAPP DESKTOP RULES
+- When the user asks to search for a WhatsApp contact, search inside
+  the installed WhatsApp Desktop application, not in AURA's chat,
+  a web search, or Chrome.
+- This applies to requests such as:
+  "Search Jawad Uni", "Find Jawad Uni on WhatsApp",
+  and "Open Jawad Uni chat".
+- When the user says "open WhatsApp" and then asks to find a contact,
+  preserve that conversational context and use WhatsApp Desktop tools.
+- Use the available WhatsApp tools to open the app, search for the
+  contact, and open the matching chat.
+- Searching for a contact is not the same as opening the chat.
+  Do not claim the chat is open until the tool confirms it.
+- Type a message only into the verified intended WhatsApp chat.
+- Do not send a message unless the user explicitly asks you to send it.
+- Before sending, verify the intended contact and prepared message
+  as far as the available tools allow.
+- Never claim a message was sent unless the tool confirms the action.
+- If a contact cannot be identified or the correct window cannot
+  be verified, explain the limitation instead of guessing.
+- Never type a contact search into AURA's own chat input.
+
+WINDOW AND APPLICATION RULES
+- Use the correct application-specific tool for every request.
+- Do not use keyboard shortcuts on an unverified active window.
+- Do not assume WhatsApp Desktop is Chrome or WhatsApp Web.
 """
+
 
 
 # =========================================================
@@ -237,7 +272,7 @@ def listen(
         return text
 
     except Exception as error:
-        print(f"Groq STT/microphone error: {error}")
+        logger.warning("Groq STT/microphone request failed (%s)", type(error).__name__)
         if raise_errors:
             raise
         return ""

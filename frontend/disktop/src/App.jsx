@@ -78,9 +78,11 @@ export default function App() {
   const [backendConnected, setBackendConnected] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState('');
+  const [chatRateLimit, setChatRateLimit] = useState(null);
   const [voiceState, setVoiceState] = useState('Idle');
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceError, setVoiceError] = useState('');
+  const [voiceRateLimit, setVoiceRateLimit] = useState(null);
   const [voiceActionPending, setVoiceActionPending] = useState(false);
   const sendingRef = useRef(false);
   const activeId = mode === 'voice' ? activeVoiceId : activeTextId;
@@ -138,6 +140,7 @@ export default function App() {
         setVoiceState(status.state);
         setVoiceActive(status.active);
         setVoiceError(status.error ?? '');
+        setVoiceRateLimit(status.rate_limit ?? null);
         if (status.messages.length) {
           setConversations((items) => items.map((item) => {
             if (item.id !== activeVoiceId) return item;
@@ -210,6 +213,7 @@ export default function App() {
       setActiveVoiceId(conversation.id);
       setVoiceState('Idle');
       setVoiceError('');
+      setVoiceRateLimit(null);
     } else {
       setActiveTextId(conversation.id);
     }
@@ -230,6 +234,7 @@ export default function App() {
       setConversations((items) => [conversation, ...items]);
       setActiveVoiceId(conversation.id);
       setVoiceState('Idle');
+      setVoiceRateLimit(null);
     }
   };
 
@@ -258,6 +263,7 @@ export default function App() {
     sendingRef.current = true;
     setIsSending(true);
     setChatError('');
+    setChatRateLimit(null);
     let conversationId = activeTextId;
     if (!conversationId) {
       const conversation = createConversation('text');
@@ -275,7 +281,14 @@ export default function App() {
       });
       addMessage(conversationId, 'aura', result.response, 'response');
     } catch (error) {
-      setChatError(`Your message is saved in this conversation, but AURA could not respond. ${error.message}`);
+      if (error.code === 'RATE_LIMIT_EXCEEDED' && error.service === 'llm') {
+        setChatRateLimit({
+          service: error.service,
+          retry_after_seconds: error.retryAfterSeconds,
+        });
+      } else {
+        setChatError(`Your message is saved in this conversation, but AURA could not respond. ${error.message}`);
+      }
     } finally {
       sendingRef.current = false;
       setIsSending(false);
@@ -295,6 +308,7 @@ export default function App() {
 
     setVoiceActionPending(true);
     setVoiceError('');
+    setVoiceRateLimit(null);
     try {
       const status = voiceActive
         ? await stopVoice(conversationId)
@@ -302,6 +316,7 @@ export default function App() {
       setVoiceState(status.state);
       setVoiceActive(status.active);
       setVoiceError(status.error ?? '');
+      setVoiceRateLimit(status.rate_limit ?? null);
     } catch (error) {
       setVoiceState('Error');
       setVoiceActive(false);
@@ -327,6 +342,7 @@ export default function App() {
     if (conversation.type === 'voice') setActiveVoiceId(conversation.id);
     else setActiveTextId(conversation.id);
     setHistoryId(conversation.id);
+    if (conversation.type === 'voice') setVoiceRateLimit(null);
     setView('history');
   };
 
@@ -392,6 +408,7 @@ export default function App() {
             onExitHistory={view === 'history' ? returnToActive : undefined}
             isSending={isSending}
             chatError={chatError}
+            rateLimit={chatRateLimit}
             backendConnected={backendConnected}
           />
         ) : (
@@ -399,6 +416,7 @@ export default function App() {
             conversation={displayedConversation}
             voiceState={voiceState}
             voiceError={voiceError}
+            rateLimit={voiceRateLimit}
             isVoiceActive={voiceActive}
             isVoiceRequestPending={voiceActionPending}
             backendConnected={backendConnected}

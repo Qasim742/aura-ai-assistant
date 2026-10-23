@@ -2,6 +2,16 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '');
 
+class AuraApiError extends Error {
+  constructor(message, rateLimit) {
+    super(message);
+    this.name = 'AuraApiError';
+    this.code = rateLimit?.code;
+    this.service = rateLimit?.service;
+    this.retryAfterSeconds = rateLimit?.retry_after_seconds ?? null;
+  }
+}
+
 async function request(path, options = {}) {
   let response;
   try {
@@ -18,7 +28,15 @@ async function request(path, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || `AURA backend request failed (${response.status}).`);
+    const detail = data.detail;
+    const rateLimit = detail?.error ?? data.error;
+    if (rateLimit?.code === 'RATE_LIMIT_EXCEEDED') {
+      throw new AuraApiError(rateLimit.message, rateLimit);
+    }
+    throw new Error(
+      (typeof detail === 'string' && detail) ||
+      `AURA backend request failed (${response.status}).`,
+    );
   }
   return data;
 }
